@@ -1,0 +1,412 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создание матрицы смежности и визуализация графа</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        svg {
+            border: 1px solid #ccc;
+        }
+        table {
+            margin-bottom: 20px;
+        }
+        input {
+            width: 50px;
+        }
+        .degrees {
+            margin-top: 20px;
+        }
+        .info {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Создание матрицы смежности и визуализация графа</h1>
+
+    <div>
+        <label for="size">Размер матрицы:</label>
+        <input type="number" id="size" min="1" value="3">
+        <button id="createMatrix">Создать матрицу</button>
+    </div>
+
+    <div id="matrixContainer"></div>
+
+    <button id="createGraph" style="display:none;">Создать граф</button>
+    <svg id="graph" width="800" height="600" style="display:none;"></svg>
+
+    <div id="info" class="info"></div>
+	<div id="edges" class="info"></div> 
+    <div id="degrees" class="degrees"></div>
+
+    <script>
+        let adjacencyMatrix = [];
+        const svg = d3.select("#graph");
+
+        document.getElementById("createMatrix").addEventListener("click", () => {
+            const size = parseInt(document.getElementById("size").value);
+            createMatrix(size);
+        });
+
+        document.getElementById("createGraph").addEventListener("click", () => {
+            createGraph();
+        });
+
+        function createMatrix(size) {
+            adjacencyMatrix = Array.from({ length: size }, () => Array(size).fill(0));
+            const matrixContainer = document.getElementById("matrixContainer");
+            matrixContainer.innerHTML = ""; // Очистка предыдущей матрицы
+
+            const table = document.createElement("table");
+            for (let i = 0; i < size; i++) {
+                const row = document.createElement("tr");
+                for (let j = 0; j < size; j++) {
+                    const cell = document.createElement("td");
+                    const input = document.createElement("input");
+                    input.type = "number";
+                    input.value = 0;
+                    input.min = 0;
+                    input.addEventListener("input", (e) => {
+                        adjacencyMatrix[i][j] = parseInt(e.target.value) || 0;
+                    });
+                    cell.appendChild(input);
+                    row.appendChild(cell);
+                }
+                table.appendChild(row);
+            }
+            matrixContainer.appendChild(table);
+            document.getElementById("createGraph").style.display = "inline"; // Показываем кнопку для создания графа
+        }
+
+        function createGraph() {
+            const width = 800;
+            const height = 600;
+            svg.style("display", "block").selectAll("*").remove(); // Очищаем граф
+
+            const nodes = adjacencyMatrix.map((_, index) => ({ id: index }));
+            const links = [];
+
+            adjacencyMatrix.forEach((row, source) => {
+                row.forEach((value, target) => {
+                    if (value > 0) {
+                        for (let i = 0; i < value; i++) {
+                            links.push({ source, target, value });
+                        }
+                    }
+                });
+            });
+
+            const simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink().id(d => d.id).distance(100))
+                .force("charge", d3.forceManyBody().strength(-200))
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            const link = svg.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(links)
+                .enter().append("line")
+                .attr("stroke-width", 1)
+                .attr("stroke", d => d.value === 2 ? "red" : "#999");
+
+            const node = svg.append("g")
+                .attr("class", "nodes")
+                .selectAll("circle")
+				.data(nodes)
+                .enter().append("circle")
+                .attr("r", 5)
+                .attr("fill", "#69b3a2")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+				node.append("title")
+                .text(d => `V ${d.id + 1}`);
+
+            const text = svg.append("g")
+                .attr("class", "texts")
+                .selectAll("text")
+                .data(nodes)
+                .enter().append("text")
+                .attr("dx", 12)
+                .attr("dy", ".35em")
+                .text(d => `V ${d.id + 1}`);
+
+            const edgeLabels = svg.append("g")
+                .attr("class", "edge-labels")
+                .selectAll("text")
+                .data(links)
+                .enter().append("text")
+                .attr("dy", -5)
+                .attr("text-anchor", "middle")
+                .text((d, i) => `e${i + 1}`);
+
+				simulation.nodes(nodes)
+                .on("tick", ticked);
+
+				simulation.force("link")
+                .links(links);
+
+			function ticked() {
+				link
+					.attr("x1", d => d.source.x)
+					.attr("y1", d => d.source.y)
+					.attr("x2", d => d.target.x)
+					.attr("y2", d => d.target.y);
+
+				node
+					.attr("cx", d => d.x)
+					.attr("cy", d => d.y);
+
+				text
+					.attr("x", d => d.x)
+					.attr("y", d => d.y);
+
+				edgeLabels
+					.attr("x", d => (d.source.x + d.target.x) / 2) // Позиция по X
+					.attr("y", d => (d.source.y + d.target.y) / 2); // Позиция по Y
+			}
+
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+
+            function dragged(event) {
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+
+            displayGraphInfo();
+            displayDegrees();
+            displayIncidenceMatrix();
+        }
+
+    function displayGraphInfo() {
+        const infoContainer = document.getElementById("info");
+        const edgesContainer = document.getElementById("edges"); // Новый контейнер для рёбер
+        const numVertices = adjacencyMatrix.length;
+        const numEdges = adjacencyMatrix.flat().reduce((sum, value) => sum + value, 0) / 2; // Делим на 2 для неориентированного графа
+        const isConnected = checkGraphConnectivity();
+        const isPseudograph = checkIfPseudograph();
+        const isHomogeneous = checkIfHomogeneous();
+        const isDivisible = checkIfDivisible();
+        const articulationPoints = findArticulationPoints();
+        const bridges = findBridges();
+
+        infoContainer.innerHTML = `
+            <div>1) Охарактеризуйте полученный граф:</div>
+            <div>Количество вершин: ${numVertices}</div>
+            <div>Количество рёбер: ${numEdges}</div>
+            <div>Тип графа: ${isPseudograph ? 'псевдограф' : 'обычный граф'}</div>
+            <div>Связность: ${isConnected ? 'связный' : 'несвязный'}</div>
+            <div>Неоднородный: ${isHomogeneous ? 'нет' : 'да'}</div>
+            <div>Разделимый: ${isDivisible ? 'да' : 'нет'}</div>
+            <div>Точки сочленения: ${articulationPoints.length > 0 ? articulationPoints.join(', ') : 'нет'}</div>
+            <div>Мосты: ${bridges.length > 0 ? bridges.join(', ') : 'нет'}</div>
+        `;
+
+        // Отображаем рёбра
+        displayEdges();
+    }
+   function displayEdges() {
+        const edgesContainer = document.getElementById("edges");
+        edgesContainer.innerHTML = ""; // Очистка предыдущих рёбер
+
+        const edges = [];
+        const edgeSet = new Set(); // Используем Set, чтобы избежать дублирования рёбер
+
+        adjacencyMatrix.forEach((row, source) => {
+            row.forEach((value, target) => {
+                if (value > 0) {
+                    for (let i = 0; i < value; i++) {
+                        // Формируем уникальное название рёбер
+                        const edgeLabel = `V${source + 1} e e${edges.length + 1} V${target + 1}`;
+                        if (!edgeSet.has(edgeLabel)) {
+                            edgeSet.add(edgeLabel);
+                            edges.push(edgeLabel);
+                        }
+                    }
+                }
+            });
+        });
+
+        edgesContainer.innerHTML = `<div>Рёбра графа: ${edges.join(', ')}</div>`;
+    }
+        function findArticulationPoints() {
+            const visited = new Set();
+            const disc = [];
+            const low = [];
+            const parent = [];
+            const ap = new Set();
+            let time = 0;
+
+            const dfs = (u) => {
+                visited.add(u);
+                disc[u] = low[u] = ++time;
+                let children = 0;
+
+                adjacencyMatrix[u].forEach((v, index) => {
+                    if (v > 0 ) {
+                        if (!visited.has(index)) {
+                            parent[index] = u;
+                            children++;
+                            dfs(index);
+                            low[u] = Math.min(low[u], low[index]);
+
+                            if (parent[u] === undefined && children > 1) {
+                                ap.add(u);
+                            }
+                            if (parent[u] !== undefined && low[index] >= disc[u]) {
+                                ap.add(u);
+                            }
+                        } else if (index !== parent[u]) {
+                            low[u] = Math.min(low[u], disc[index]);
+                        }
+                    }
+                });
+            };
+
+            for (let i = 0; i < adjacencyMatrix.length; i++) {
+                if (!visited.has(i)) {
+                    dfs(i);
+                }
+            }
+
+            return Array.from(ap).map(v => `v${v + 1}`);
+        }
+
+        function findBridges() {
+            const visited = new Set();
+            const disc = [];
+            const low = [];
+            const bridges = [];
+            let time = 0;
+
+            const dfs = (u, parent) => {
+                visited.add(u);
+                disc[u] = low[u] = ++time;
+
+                adjacencyMatrix[u].forEach((v, index) => {
+                    if (v > 0) {
+                        if (!visited.has(index)) {
+                            dfs(index, u);
+                            low[u] = Math.min(low[u], low[index]);
+
+                            if (low[index] > disc[u]) {
+                                bridges.push(`e${Math.min(u, index) + 1}-${Math.max(u, index) + 1}`);
+                            }
+                        } else if (index !== parent) {
+                            low[u] = Math.min(low[u], disc[index]);
+                        }
+                    }
+                });
+            };
+
+            for (let i = 0; i < adjacencyMatrix.length; i++) {
+                if (!visited.has(i)) {
+                    dfs(i, -1);
+                }
+            }
+
+            return bridges;
+        } 
+
+        function checkIfHomogeneous() {
+            const degrees = adjacencyMatrix.map(row => row.reduce((sum, value) => sum + value, 0));
+            return new Set(degrees).size === 1; // Если все степени равны, граф однородный
+        }
+
+        function checkIfDivisible() {
+            // Пример проверки на разделимость: если граф можно разбить на два непересекающихся подмножества
+            // Здесь можно использовать алгоритм для проверки разделимости
+            return false; // Заглушка, нужно реализовать логику
+        }
+
+        function checkGraphConnectivity() {
+            const visited = new Set();
+            const dfs = (node) => {
+                visited.add(node);
+                adjacencyMatrix[node].forEach((value, index) => {
+                    if (value > 0 && !visited.has(index)) {
+                        dfs(index);
+                    }
+                });
+            };
+            dfs(0); // Начинаем с первой вершины
+            return visited.size === adjacencyMatrix.length;
+        }
+
+        function checkIfPseudograph() {
+            for (let i = 0; i < adjacencyMatrix.length; i++) {
+                if (adjacencyMatrix[i][i] > 0) {
+                    return true; // Если есть петля
+                }
+            }
+            return false;
+        }
+
+        function displayDegrees() {
+            const degreesContainer = document.getElementById("degrees");
+            degreesContainer.innerHTML = ""; // Очистка предыдущих степеней
+
+            adjacencyMatrix.forEach((row, index) => {
+                const pPlus = row.reduce((sum, value) => sum + value, 0); // Исходящие рёбра
+                const pMinus = adjacencyMatrix.reduce((sum, r) => sum + r[index], 0); // Входящие рёбра
+                degreesContainer.innerHTML += `<div>Вершина V${index + 1}: p+ = ${pPlus}, p- = ${pMinus}</div>`;
+            });
+        }
+
+        function displayIncidenceMatrix() {
+            const incidenceMatrixContainer = document.getElementById("incidenceMatrix");
+            incidenceMatrixContainer.innerHTML = ""; // Очистка предыдущей матрицы
+
+            const edges = [];
+            adjacencyMatrix.forEach((row, source) => {
+                row.forEach((value, target) => {
+                    if (value > 0) {
+                        for (let i = 0; i < value; i++) {
+                            edges.push({ source, target });
+                        }
+                    }
+                });
+            });
+
+            const numVertices = adjacencyMatrix.length;
+            const numEdges = edges.length;
+            const incidenceMatrix = Array.from({ length: numVertices }, () => Array(numEdges).fill(0));
+
+            edges.forEach((edge, index) => {
+                incidenceMatrix[edge.source][index] = 1; // Исходящая вершина
+				incidenceMatrix[edge.target][index] = -1; // Входящая вершина для неориентированного графа
+            });
+
+            const table = document.createElement("table");
+            incidenceMatrix.forEach(row => {
+                const tr = document.createElement("tr");
+                row.forEach(value => {
+                    const td = document.createElement("td");
+                    td.textContent = value;
+                    tr.appendChild(td);
+                });
+                table.appendChild(tr);
+            });
+
+            incidenceMatrixContainer.appendChild(table);
+        }
+    </script>
+</body>
+</html>
